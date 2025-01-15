@@ -129,5 +129,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_unit_tests.step);
     test_step.dependOn(&run_day7_unit_tests.step);
     test_step.dependOn(&run_sorting_tests.step);
-    test_step.dependOn(&run_day6_test);
+    test_step.dependOn(&run_day6_test.step);
 }
