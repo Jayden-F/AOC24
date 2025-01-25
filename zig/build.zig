@@ -121,7 +121,7 @@ pub fn build(b: *std.Build) void {
     const run_day6_test = b.addRunArtifact(day6_test);
 
     const huffman_test = b.addTest(.{
-        .root_source_file = b.path("src/day_6.zig"),
+        .root_source_file = b.path("src/huffman_coding.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -136,6 +136,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_unit_tests.step);
     test_step.dependOn(&run_day7_unit_tests.step);
     test_step.dependOn(&run_sorting_tests.step);
-    test_step.dependOn(&run_day6_test.step);
     test_step.dependOn(&run_huffman_test.step);
+    test_step.dependOn(&run_day6_test.step);
 }
