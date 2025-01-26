@@ -141,8 +141,8 @@ pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocato
     var out_stream = try allocator.alloc(u8, stream.len);
     @memset(out_stream, 0);
 
+    var total_bits: usize = 0;
     var byte_index: usize = 0;
-    var bit_index: usize = 0;
 
     var buffer: u64 = 0;
     var buffer_offset: usize = 0;
@@ -154,9 +154,10 @@ pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocato
 
         const shift_left_amount: u6 = @intCast(64 - buffer_offset - length);
         const bits = value << shift_left_amount;
+
         buffer |= bits;
 
-        bit_index += length;
+        total_bits += length;
         buffer_offset += length;
 
         while (buffer_offset >= 8) {
@@ -175,7 +176,7 @@ pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocato
     if (allocator.resize(out_stream, byte_index)) {
         out_stream.len = byte_index;
     }
-    return HuffmanEncoding{ .len = bit_index, .decoded_len = stream.len, .payload = out_stream };
+    return HuffmanEncoding{ .len = total_bits, .decoded_len = stream.len, .payload = out_stream };
 }
 
 pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *HuffmanNode, allocator: std.mem.Allocator) ![]u8 {
@@ -209,7 +210,7 @@ pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *HuffmanNode, allocator
 test "huffman_coding" {
     const allocator = std.testing.allocator;
 
-    const input = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat";
+    const input = "the quick brown fox did things and stuff that it liked. although is am unsure why this is Breaking DSFsadfsfSDFS";
     var freqs = std.AutoHashMap(u8, usize).init(allocator);
     defer freqs.deinit();
 
