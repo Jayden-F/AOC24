@@ -44,7 +44,7 @@ const HuffmanNode = struct {
         }
 
         if (self.character) |char| {
-            std.debug.print("char: {c}, code: {b}\n", .{ char, prefix });
+            std.debug.print("char: {c}, code: {b:0>8}\n", .{ char, prefix });
         }
     }
 };
@@ -55,14 +55,17 @@ fn lessThan(a: *HuffmanNode, b: *HuffmanNode) bool {
 
 const Queue = pqueue.PriorityQueue(*HuffmanNode, lessThan);
 
-pub fn huffman_coding(chars: []const u8, freqs: []const u64, allocator: std.mem.Allocator) !*HuffmanNode {
-    const n = chars.len;
+pub fn huffman_coding(freqs: *std.AutoHashMap(u8, usize), allocator: std.mem.Allocator) !*HuffmanNode {
+    const n = freqs.count();
     const nodes: []*HuffmanNode = try allocator.alloc(*HuffmanNode, n);
     defer allocator.free(nodes);
 
-    for (chars, freqs, 0..) |char, freq, i| {
+    var iter = freqs.iterator();
+    var i: usize = 0;
+    while (iter.next()) |item| {
         nodes[i] = try allocator.create(HuffmanNode);
-        nodes[i].* = HuffmanNode{ .character = char, .frequency = freq };
+        nodes[i].* = HuffmanNode{ .character = item.key_ptr.*, .frequency = item.value_ptr.* };
+        i += 1;
     }
 
     var queue = try Queue.build(allocator, nodes);
@@ -74,7 +77,7 @@ pub fn huffman_coding(chars: []const u8, freqs: []const u64, allocator: std.mem.
 
         // The additional internal nodes are owned by the caller.
         const new_node = try allocator.create(HuffmanNode);
-        new_node.* = .{ .frequency = (left.frequency + right.frequency), .left = left, .right = right };
+        new_node.* = HuffmanNode{ .character = null, .frequency = (left.frequency + right.frequency), .left = left, .right = right };
         try queue.push(new_node);
     }
 
@@ -136,39 +139,42 @@ pub fn huffman_table(root: *HuffmanNode, allocator: std.mem.Allocator) !HuffmanT
 
 pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocator: std.mem.Allocator) !HuffmanEncoding {
     var out_stream = try allocator.alloc(u8, stream.len);
-    for (0..out_stream.len) |i| {
-        out_stream[i] = 0;
-    }
+    @memset(out_stream, 0);
 
+    var byte_index: usize = 0;
     var bit_index: usize = 0;
+
+    var buffer: u64 = 0;
+    var buffer_offset: usize = 0;
 
     for (stream) |char| {
         const encoding: HuffmanEntry = table.get(char);
-        var value = encoding.value;
-        var length = encoding.len;
+        const value: u64 = @intCast(encoding.value);
+        const length: u64 = @intCast(encoding.len);
 
-        while (length > 0) {
-            const byte_index: usize = bit_index / 8;
-            const bit_offset = bit_index % 8;
+        const shift_left_amount: u6 = @intCast(64 - buffer_offset - length);
+        const bits = value << shift_left_amount;
+        buffer |= bits;
 
-            const bits_to_write = @min(8 - bit_offset, length);
-            const shift_left_amount: u3 = @intCast(8 - bit_offset - bits_to_write);
-            const bits = value << shift_left_amount;
+        bit_index += length;
+        buffer_offset += length;
 
-            out_stream[byte_index] |= bits;
-
-            bit_index += bits_to_write;
-            const shift_right_amount: u3 = @intCast(bits_to_write);
-            value >>= shift_right_amount;
-            length -= bits_to_write;
+        while (buffer_offset >= 8) {
+            out_stream[byte_index] = @intCast(buffer >> 56);
+            buffer <<= 8;
+            buffer_offset -= 8;
+            byte_index += 1;
         }
     }
 
-    const used_bytes = (bit_index + 7) / 8;
-    if (allocator.resize(out_stream, used_bytes)) {
-        out_stream.len = used_bytes;
+    if (buffer_offset > 0) {
+        out_stream[byte_index] = @intCast(buffer >> 56);
+        byte_index += 1;
     }
 
+    if (allocator.resize(out_stream, byte_index)) {
+        out_stream.len = byte_index;
+    }
     return HuffmanEncoding{ .len = bit_index, .decoded_len = stream.len, .payload = out_stream };
 }
 
@@ -192,8 +198,8 @@ pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *HuffmanNode, allocator
 
         if (curr.?.character) |char| {
             out_stream[out_index] = char;
-            curr = tree;
             out_index += 1;
+            curr = tree;
         }
     }
 
@@ -203,10 +209,19 @@ pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *HuffmanNode, allocator
 test "huffman_coding" {
     const allocator = std.testing.allocator;
 
-    const chars = "abcdef";
-    const freqs = [_]u64{ 5, 9, 12, 13, 16, 45 };
+    const input = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat";
+    var freqs = std.AutoHashMap(u8, usize).init(allocator);
+    defer freqs.deinit();
 
-    const tree: *HuffmanNode = try huffman_coding(chars[0..], freqs[0..], allocator);
+    for (input) |char| {
+        if (!freqs.contains(char)) {
+            try freqs.put(char, 0);
+        }
+        const count = freqs.getEntry(char);
+        count.?.value_ptr.* += 1;
+    }
+
+    const tree: *HuffmanNode = try huffman_coding(&freqs, allocator);
     defer tree.free(allocator);
 
     tree.print();
@@ -221,27 +236,25 @@ test "huffman_coding" {
         std.debug.print("{c}: {}\n", .{ key, value });
     }
 
-    const stream = "abcdef";
-    const encoding = try huffman_encoding(stream[0..], &table, allocator);
-    defer allocator.free(encoding.payload);
-
-    for (stream) |byte| {
+    std.debug.print("input  : ", .{});
+    for (input) |byte| {
         std.debug.print("{b:0>8} ", .{byte});
     }
-
     std.debug.print("\n", .{});
 
+    const encoding = try huffman_encoding(input[0..], &table, allocator);
+    defer allocator.free(encoding.payload);
+
+    std.debug.print("encoded: ", .{});
     for (encoding.payload) |byte| {
         std.debug.print("{b:0>8} ", .{byte});
     }
+    std.debug.print("\n", .{});
 
     const round_trip = try huffman_decoding(encoding, tree, allocator);
     defer allocator.free(round_trip);
 
-    std.debug.print("\n", .{});
-    for (round_trip) |byte| {
-        std.debug.print("{b:0>8} ", .{byte});
-    }
+    try std.testing.expectEqualSlices(u8, input, round_trip);
 
-    try std.testing.expectEqualSlices(u8, stream, round_trip);
+    std.debug.print("Original: {}, Encoded: {}\n", .{ input.len, @divFloor(encoding.len, 8) });
 }
