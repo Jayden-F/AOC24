@@ -137,31 +137,36 @@ pub fn huffman_table(root: *HuffmanNode, allocator: std.mem.Allocator) !HuffmanT
     return result;
 }
 
-pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocator: std.mem.Allocator) !HuffmanEncoding {
+pub fn huffman_encoding(comptime T: type, stream: []const u8, table: *const HuffmanTable, allocator: std.mem.Allocator) !HuffmanEncoding {
+    const info = @typeInfo(T);
+    if (info != .Int) @compileError("T must be an integer type");
+    const bits = comptime info.Int.bits;
+    const Shift_T: type = comptime std.meta.Int(.unsigned, std.math.log2(bits));
+
     var out_stream = try allocator.alloc(u8, stream.len);
     @memset(out_stream, 0);
 
-    var total_bits: usize = 0;
+    var total_bits: T = 0;
     var byte_index: usize = 0;
 
-    var buffer: u64 = 0;
+    var buffer: T = 0;
     var buffer_offset: usize = 0;
 
     for (stream) |char| {
         const encoding: HuffmanEntry = table.get(char);
-        const value: u64 = @intCast(encoding.value);
-        const length: u64 = @intCast(encoding.len);
+        const value: T = @intCast(encoding.value);
+        const length: T = @intCast(encoding.len);
 
-        const shift_left_amount: u6 = @intCast(64 - buffer_offset - length);
-        const bits = value << shift_left_amount;
+        const shift_left_amount: Shift_T = @intCast(bits - buffer_offset - length);
+        const shifted_value = value << shift_left_amount;
 
-        buffer |= bits;
+        buffer |= shifted_value;
 
         total_bits += length;
         buffer_offset += length;
 
         while (buffer_offset >= 8) {
-            out_stream[byte_index] = @intCast(buffer >> 56);
+            out_stream[byte_index] = @intCast(buffer >> (bits - 8));
             buffer <<= 8;
             buffer_offset -= 8;
             byte_index += 1;
@@ -169,7 +174,7 @@ pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocato
     }
 
     if (buffer_offset > 0) {
-        out_stream[byte_index] = @intCast(buffer >> 56);
+        out_stream[byte_index] = @intCast(buffer >> (bits - 8));
         byte_index += 1;
     }
 
@@ -207,10 +212,22 @@ pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *HuffmanNode, allocator
     return out_stream;
 }
 
+fn print_bits(elements: []const u8) void {
+    for (elements) |byte| {
+        std.debug.print("{b:0>8} ", .{byte});
+    }
+    std.debug.print("\n", .{});
+}
+
 test "huffman_coding" {
     const allocator = std.testing.allocator;
 
-    const input = "the quick brown fox did things and stuff that it liked. although is am unsure why this is Breaking DSFsadfsfSDFS";
+    const input =
+        \\\The curious coder, aged 29, wrote a Huffman encoding test: \"Success is 100% effort, 0 regrets!\"
+        \\\ can I change this string. that includes the new line character.
+        \\\ What the hell
+    ;
+
     var freqs = std.AutoHashMap(u8, usize).init(allocator);
     defer freqs.deinit();
 
@@ -220,6 +237,11 @@ test "huffman_coding" {
         }
         const count = freqs.getEntry(char);
         count.?.value_ptr.* += 1;
+    }
+
+    var freq_iter = freqs.iterator();
+    while (freq_iter.next()) |kv| {
+        std.debug.print("{c}:{}\n", .{ kv.key_ptr.*, kv.value_ptr.* });
     }
 
     const tree: *HuffmanNode = try huffman_coding(&freqs, allocator);
@@ -232,25 +254,17 @@ test "huffman_coding" {
 
     var iter = table.table.iterator();
     while (iter.next()) |kv| {
-        const key = kv.key_ptr.*;
-        const value = kv.value_ptr.*;
-        std.debug.print("{c}: {}\n", .{ key, value });
+        std.debug.print("{c}: {}\n", .{ kv.key_ptr.*, kv.value_ptr.* });
     }
 
-    std.debug.print("input  : ", .{});
-    for (input) |byte| {
-        std.debug.print("{b:0>8} ", .{byte});
-    }
-    std.debug.print("\n", .{});
+    std.debug.print("input: ", .{});
+    print_bits(input);
 
-    const encoding = try huffman_encoding(input[0..], &table, allocator);
+    const encoding = try huffman_encoding(u64, input[0..], &table, allocator);
     defer allocator.free(encoding.payload);
 
-    std.debug.print("encoded: ", .{});
-    for (encoding.payload) |byte| {
-        std.debug.print("{b:0>8} ", .{byte});
-    }
-    std.debug.print("\n", .{});
+    std.debug.print("encoding: ", .{});
+    print_bits(encoding.payload);
 
     const round_trip = try huffman_decoding(encoding, tree, allocator);
     defer allocator.free(round_trip);
