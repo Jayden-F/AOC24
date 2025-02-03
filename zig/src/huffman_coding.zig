@@ -7,8 +7,8 @@ const HuffmanNode = struct {
 
     frequency: u64,
     character: ?u8 = null,
-    left: ?*Self = null,
-    right: ?*Self = null,
+    left: ?*const Self = null,
+    right: ?*const Self = null,
 
     priority: ?usize = null,
     // Getter method for the priority field
@@ -21,7 +21,7 @@ const HuffmanNode = struct {
         self.priority = value;
     }
 
-    pub fn free(self: *Self, allocator: std.mem.Allocator) void {
+    pub fn free(self: *const Self, allocator: std.mem.Allocator) void {
         if (self.left) |left| {
             left.free(allocator);
         }
@@ -123,7 +123,7 @@ const HuffmanEncoding = struct {
     payload: []u8,
 };
 
-fn huffman_table_rec(node: *HuffmanNode, table: *HuffmanTable, prefix: u8, depth: u8) !void {
+fn huffman_table_rec(node: *const HuffmanNode, table: *HuffmanTable, prefix: u8, depth: u8) !void {
     if (node.left) |left| {
         try huffman_table_rec(left, table, prefix << 1, depth + 1);
     }
@@ -165,10 +165,10 @@ pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocato
     return HuffmanEncoding{ .len = bits, .decoded_len = stream.len, .payload = elements };
 }
 
-pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *HuffmanNode, allocator: std.mem.Allocator) ![]u8 {
+pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *const HuffmanNode, allocator: std.mem.Allocator) ![]u8 {
     var out_stream = try allocator.alloc(u8, encoding.decoded_len);
 
-    var curr: ?*HuffmanNode = tree;
+    var curr: ?*const HuffmanNode = tree;
     var out_index: usize = 0;
     var bit_index: usize = 0;
 
@@ -213,16 +213,16 @@ test "huffman_coding" {
     try freqs.put('e', 16);
     try freqs.put('f', 45);
 
-    var a = HuffmanNode{ .character = 'a', .frequency = 5 };
-    var b = HuffmanNode{ .character = 'b', .frequency = 9 };
-    var c = HuffmanNode{ .character = 'c', .frequency = 12 };
-    var d = HuffmanNode{ .character = 'd', .frequency = 13 };
-    var e = HuffmanNode{ .character = 'e', .frequency = 16 };
-    var f = HuffmanNode{ .character = 'f', .frequency = 45 };
-    var ab = HuffmanNode{ .character = null, .frequency = 14, .left = &a, .right = &b };
-    var cd = HuffmanNode{ .character = null, .frequency = 25, .left = &c, .right = &d };
-    var abe = HuffmanNode{ .character = null, .frequency = 30, .left = &ab, .right = &e };
-    var cdabe = HuffmanNode{ .character = null, .frequency = 55, .left = &cd, .right = &abe };
+    const a = HuffmanNode{ .character = 'a', .frequency = 5 };
+    const b = HuffmanNode{ .character = 'b', .frequency = 9 };
+    const c = HuffmanNode{ .character = 'c', .frequency = 12 };
+    const d = HuffmanNode{ .character = 'd', .frequency = 13 };
+    const e = HuffmanNode{ .character = 'e', .frequency = 16 };
+    const f = HuffmanNode{ .character = 'f', .frequency = 45 };
+    const ab = HuffmanNode{ .character = null, .frequency = 14, .left = &a, .right = &b };
+    const cd = HuffmanNode{ .character = null, .frequency = 25, .left = &c, .right = &d };
+    const abe = HuffmanNode{ .character = null, .frequency = 30, .left = &ab, .right = &e };
+    const cdabe = HuffmanNode{ .character = null, .frequency = 55, .left = &cd, .right = &abe };
     const expected = HuffmanNode{ .character = null, .frequency = 100, .left = &f, .right = &cdabe };
 
     const tree: *HuffmanNode = try huffman_coding(&freqs, allocator);
