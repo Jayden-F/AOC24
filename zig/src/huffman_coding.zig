@@ -53,6 +53,10 @@ fn lessThan(a: *HuffmanNode, b: *HuffmanNode) bool {
     return a.frequency < b.frequency;
 }
 
+fn equal(a: *const HuffmanNode, b: *const HuffmanNode) bool {
+    return a.frequency == b.frequency and a.character == b.character;
+}
+
 const Queue = pqueue.PriorityQueue(*HuffmanNode, lessThan);
 
 pub fn huffman_coding(freqs: *std.AutoHashMap(u8, usize), allocator: std.mem.Allocator) !*HuffmanNode {
@@ -137,51 +141,27 @@ pub fn huffman_table(root: *HuffmanNode, allocator: std.mem.Allocator) !HuffmanT
     return result;
 }
 
-pub fn huffman_encoding(comptime T: type, stream: []const u8, table: *const HuffmanTable, allocator: std.mem.Allocator) !HuffmanEncoding {
-    const info = @typeInfo(T);
-    if (info != .Int) @compileError("T must be an integer type");
-    const bits = comptime info.Int.bits;
-    const Shift_T: type = comptime std.meta.Int(.unsigned, std.math.log2(bits));
+pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocator: std.mem.Allocator) !HuffmanEncoding {
+    var elements = try allocator.alloc(u8, stream.len);
 
-    var out_stream = try allocator.alloc(u8, stream.len);
-    @memset(out_stream, 0);
-
-    var total_bits: T = 0;
-    var byte_index: usize = 0;
-
-    var buffer: T = 0;
-    var buffer_offset: usize = 0;
+    var out_stream = std.io.fixedBufferStream(elements[0..]);
+    var bit_writer = std.io.bitWriter(.big, out_stream.writer());
+    var bits: usize = 0;
 
     for (stream) |char| {
         const encoding: HuffmanEntry = table.get(char);
-        const value: T = @intCast(encoding.value);
-        const length: T = @intCast(encoding.len);
+        try bit_writer.writeBits(encoding.value, encoding.len);
+        bits += encoding.len;
+    }
+    try bit_writer.flushBits();
 
-        const shift_left_amount: Shift_T = @intCast(bits - buffer_offset - length);
-        const shifted_value = value << shift_left_amount;
-
-        buffer |= shifted_value;
-
-        total_bits += length;
-        buffer_offset += length;
-
-        while (buffer_offset >= 8) {
-            out_stream[byte_index] = @intCast(buffer >> (bits - 8));
-            buffer <<= 8;
-            buffer_offset -= 8;
-            byte_index += 1;
-        }
+    const len = (bits + 7) / 8;
+    std.debug.print("len: {}\n", .{len});
+    if (allocator.resize(elements, len)) {
+        elements.len = len;
     }
 
-    if (buffer_offset > 0) {
-        out_stream[byte_index] = @intCast(buffer >> (bits - 8));
-        byte_index += 1;
-    }
-
-    if (allocator.resize(out_stream, byte_index)) {
-        out_stream.len = byte_index;
-    }
-    return HuffmanEncoding{ .len = total_bits, .decoded_len = stream.len, .payload = out_stream };
+    return HuffmanEncoding{ .len = bits, .decoded_len = stream.len, .payload = elements };
 }
 
 pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *HuffmanNode, allocator: std.mem.Allocator) ![]u8 {
@@ -219,7 +199,52 @@ fn print_bits(elements: []const u8) void {
     std.debug.print("\n", .{});
 }
 
+pub fn same_tree(comptime T: type, comptime is_equal: fn (*const T, *const T) bool, a: ?*const T, b: ?*const T) bool {
+    if (a == null and b == null) {
+        return true;
+    }
+
+    if (a == null and b == null) {
+        return false;
+    }
+
+    return is_equal(a.?, b.?) and same_tree(T, is_equal, a.?.left, b.?.left) and
+        same_tree(T, is_equal, a.?.right, a.?.right);
+}
+
 test "huffman_coding" {
+    const allocator = std.testing.allocator;
+
+    var freqs = std.AutoHashMap(u8, usize).init(allocator);
+    defer freqs.deinit();
+
+    try freqs.put('a', 5);
+    try freqs.put('b', 9);
+    try freqs.put('c', 12);
+    try freqs.put('d', 13);
+    try freqs.put('e', 16);
+    try freqs.put('f', 45);
+
+    var a = HuffmanNode{ .character = 'a', .frequency = 5 };
+    var b = HuffmanNode{ .character = 'b', .frequency = 9 };
+    var c = HuffmanNode{ .character = 'c', .frequency = 12 };
+    var d = HuffmanNode{ .character = 'd', .frequency = 13 };
+    var e = HuffmanNode{ .character = 'e', .frequency = 16 };
+    var f = HuffmanNode{ .character = 'f', .frequency = 45 };
+
+    var ab = HuffmanNode{ .character = null, .frequency = 14, .left = &a, .right = &b };
+    var cd = HuffmanNode{ .character = null, .frequency = 25, .left = &c, .right = &d };
+    var abe = HuffmanNode{ .character = null, .frequency = 30, .left = &ab, .right = &e };
+    var cdabe = HuffmanNode{ .character = null, .frequency = 55, .left = &cd, .right = &abe };
+    const expected = HuffmanNode{ .character = null, .frequency = 100, .left = &f, .right = &cdabe };
+
+    const tree: *HuffmanNode = try huffman_coding(&freqs, allocator);
+    defer tree.free(allocator);
+
+    try std.testing.expect(same_tree(HuffmanNode, equal, tree, &expected));
+}
+
+test "huffman_encode/decode" {
     const allocator = std.testing.allocator;
 
     const input =
@@ -260,7 +285,7 @@ test "huffman_coding" {
     std.debug.print("input: ", .{});
     print_bits(input);
 
-    const encoding = try huffman_encoding(u64, input[0..], &table, allocator);
+    const encoding = try huffman_encoding(input[0..], &table, allocator);
     defer allocator.free(encoding.payload);
 
     std.debug.print("encoding: ", .{});
