@@ -143,26 +143,51 @@ pub fn huffman_table(root: *const HuffmanNode, allocator: std.mem.Allocator) !Hu
 }
 
 pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocator: std.mem.Allocator) !HuffmanEncoding {
-    var elements = try allocator.alloc(u8, stream.len);
+    const BufferT = u32;
+    const buffer_num_bits = comptime @typeInfo(BufferT).Int.bits;
+    const ShiftT: type = comptime std.meta.Int(.unsigned, std.math.log2(buffer_num_bits));
 
-    var out_stream = std.io.fixedBufferStream(elements[0..]);
-    var bit_writer = std.io.bitWriter(.big, out_stream.writer());
-    var bits: usize = 0;
+    var out_stream = try allocator.alloc(u8, stream.len);
+    @memset(out_stream, 0);
+
+    var buffer: BufferT = 0;
+    var current_byte: usize = 0; // in outstream
+    var current_bit: usize = 0; // in buffer
 
     for (stream) |char| {
         const encoding: HuffmanEntry = table.get(char);
-        try bit_writer.writeBits(encoding.value, encoding.len);
-        bits += encoding.len;
-    }
-    try bit_writer.flushBits();
+        const value: BufferT = @intCast(encoding.value);
+        const length: BufferT = @intCast(encoding.len);
 
-    const len = (bits + 7) / 8;
-    std.debug.print("len: {}\n", .{len});
-    if (allocator.resize(elements, len)) {
-        elements.len = len;
+        const shift_left_amount: ShiftT = @intCast(buffer_num_bits - current_bit - length);
+        const shifted_value = value << shift_left_amount;
+
+        buffer |= shifted_value;
+        current_bit += length;
+
+        // write to out_stream one byte at a time.
+        while (current_bit >= 8) {
+            out_stream[current_byte] = @intCast(buffer >> (buffer_num_bits - 8));
+            buffer <<= 8;
+            current_bit -= 8;
+            current_byte += 1;
+        }
     }
 
-    return HuffmanEncoding{ .len = bits, .decoded_len = stream.len, .payload = elements };
+    //calculate the numbers of bits
+    const total_num_bits = (current_byte) * 8 + current_bit;
+
+    // flush last byte of buffer
+    if (current_bit > 0) {
+        out_stream[current_byte] = @intCast(buffer >> (buffer_num_bits - 8));
+        current_byte += 1;
+    }
+
+    if (allocator.resize(out_stream, current_byte)) {
+        out_stream.len = current_byte;
+    }
+
+    return HuffmanEncoding{ .len = total_num_bits, .decoded_len = stream.len, .payload = out_stream };
 }
 
 pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *const HuffmanNode, allocator: std.mem.Allocator) ![]u8 {
@@ -172,17 +197,20 @@ pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *const HuffmanNode, all
     var out_index: usize = 0;
     var bit_index: usize = 0;
 
+    // walk the encoding payload one bit at a time
     while (bit_index < encoding.len) : (bit_index += 1) {
         const byte_index: usize = bit_index / 8;
         const bit_offset: u3 = @intCast(bit_index % 8);
-
         const bit: u8 = (encoding.payload[byte_index] >> (7 - bit_offset)) & 1;
+
+        // walk the Huffman Encoding tree.
         switch (bit) {
             0 => curr = curr.?.left,
             1 => curr = curr.?.right,
             else => unreachable,
         }
 
+        //  Presence of char indicates a leaf node.
         if (curr.?.character) |char| {
             out_stream[out_index] = char;
             out_index += 1;
