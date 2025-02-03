@@ -118,7 +118,7 @@ const HuffmanTable = struct {
 };
 
 const HuffmanEncoding = struct {
-    len: usize,
+    len_bits: usize,
     decoded_len: usize,
     payload: []u8,
 };
@@ -144,15 +144,15 @@ pub fn huffman_table(root: *const HuffmanNode, allocator: std.mem.Allocator) !Hu
 
 pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocator: std.mem.Allocator) !HuffmanEncoding {
     const BufferT = u32;
-    const buffer_num_bits = comptime @typeInfo(BufferT).Int.bits;
+    const buffer_num_bits: u32 = comptime @typeInfo(BufferT).Int.bits;
     const ShiftT: type = comptime std.meta.Int(.unsigned, std.math.log2(buffer_num_bits));
 
     var out_stream = try allocator.alloc(u8, stream.len);
     @memset(out_stream, 0);
 
     var buffer: BufferT = 0;
-    var current_byte: usize = 0; // in outstream
-    var current_bit: usize = 0; // in buffer
+    var current_byte: u32 = 0; // in outstream
+    var current_bit: u32 = 0; // in buffer
 
     for (stream) |char| {
         const encoding: HuffmanEntry = table.get(char);
@@ -174,7 +174,7 @@ pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocato
     }
 
     //calculate the numbers of bits
-    const total_num_bits = (current_byte) * 8 + current_bit;
+    const total_num_bits = current_byte * 8 + current_bit;
 
     // flush last byte of buffer
     if (current_bit > 0) {
@@ -186,7 +186,7 @@ pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocato
         out_stream.len = current_byte;
     }
 
-    return HuffmanEncoding{ .len = total_num_bits, .decoded_len = stream.len, .payload = out_stream };
+    return HuffmanEncoding{ .len_bits = total_num_bits, .decoded_len = stream.len, .payload = out_stream };
 }
 
 pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *const HuffmanNode, allocator: std.mem.Allocator) ![]u8 {
@@ -197,7 +197,7 @@ pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *const HuffmanNode, all
     var bit_index: usize = 0;
 
     // walk the encoding payload one bit at a time
-    while (bit_index < encoding.len) : (bit_index += 1) {
+    while (bit_index < encoding.len_bits) : (bit_index += 1) {
         const byte_index: usize = bit_index / 8;
         const bit_offset: u3 = @intCast(bit_index % 8);
         const bit: u8 = (encoding.payload[byte_index] >> (7 - bit_offset)) & 1;
@@ -209,7 +209,7 @@ pub fn huffman_decoding(encoding: HuffmanEncoding, tree: *const HuffmanNode, all
             else => unreachable,
         }
 
-        //  Presence of char indicates a leaf node.
+        //  presence of char indicates we have reached a leaf node.
         if (curr.?.character) |char| {
             out_stream[out_index] = char;
             out_index += 1;
@@ -310,5 +310,5 @@ test "huffman_encode/decode" {
 
     try std.testing.expectEqualSlices(u8, input, round_trip);
 
-    std.debug.print("Original: {}, Encoded: {}\n", .{ input.len, @divFloor(encoding.len, 8) });
+    std.debug.print("Original: {}, Encoded: {}\n", .{ input.len, @divFloor(encoding.len_bits, 8) });
 }
