@@ -166,10 +166,9 @@ pub fn huffman_encoding(stream: []const u8, table: *const HuffmanTable, allocato
         current_bit += length;
 
         // write to out_stream one byte at a time.
-        while (current_bit >= 8) {
+        while (current_bit >= 8) : (current_bit -= 8) {
             out_stream[current_byte] = @intCast(buffer >> (buffer_num_bits - 8));
             buffer <<= 8;
-            current_bit -= 8;
             current_byte += 1;
         }
     }
