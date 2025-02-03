@@ -1,5 +1,6 @@
 const std = @import("std");
 const pqueue = @import("pqueue.zig");
+const trees = @import("trees.zig");
 
 const HuffmanNode = struct {
     const Self = @This();
@@ -199,19 +200,6 @@ fn print_bits(elements: []const u8) void {
     std.debug.print("\n", .{});
 }
 
-pub fn same_tree(comptime T: type, comptime is_equal: fn (*const T, *const T) bool, a: ?*const T, b: ?*const T) bool {
-    if (a == null and b == null) {
-        return true;
-    }
-
-    if (a == null and b == null) {
-        return false;
-    }
-
-    return is_equal(a.?, b.?) and same_tree(T, is_equal, a.?.left, b.?.left) and
-        same_tree(T, is_equal, a.?.right, a.?.right);
-}
-
 test "huffman_coding" {
     const allocator = std.testing.allocator;
 
@@ -231,7 +219,6 @@ test "huffman_coding" {
     var d = HuffmanNode{ .character = 'd', .frequency = 13 };
     var e = HuffmanNode{ .character = 'e', .frequency = 16 };
     var f = HuffmanNode{ .character = 'f', .frequency = 45 };
-
     var ab = HuffmanNode{ .character = null, .frequency = 14, .left = &a, .right = &b };
     var cd = HuffmanNode{ .character = null, .frequency = 25, .left = &c, .right = &d };
     var abe = HuffmanNode{ .character = null, .frequency = 30, .left = &ab, .right = &e };
@@ -241,7 +228,7 @@ test "huffman_coding" {
     const tree: *HuffmanNode = try huffman_coding(&freqs, allocator);
     defer tree.free(allocator);
 
-    try std.testing.expect(same_tree(HuffmanNode, equal, tree, &expected));
+    try std.testing.expect(trees.same_tree(HuffmanNode, equal, tree, &expected));
 }
 
 test "huffman_encode/decode" {
