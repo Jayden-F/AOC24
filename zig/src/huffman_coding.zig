@@ -60,7 +60,7 @@ fn equal(a: *const HuffmanNode, b: *const HuffmanNode) bool {
 
 const Queue = pqueue.PriorityQueue(*HuffmanNode, lessThan);
 
-pub fn huffman_coding(freqs: *std.AutoHashMap(u8, usize), allocator: std.mem.Allocator) !*HuffmanNode {
+pub fn huffman_coding(freqs: *std.AutoHashMap(u8, usize), allocator: std.mem.Allocator) !*const HuffmanNode {
     const n = freqs.count();
     const nodes: []*HuffmanNode = try allocator.alloc(*HuffmanNode, n);
     defer allocator.free(nodes);
@@ -136,7 +136,7 @@ fn huffman_table_rec(node: *const HuffmanNode, table: *HuffmanTable, prefix: u8,
     }
 }
 
-pub fn huffman_table(root: *HuffmanNode, allocator: std.mem.Allocator) !HuffmanTable {
+pub fn huffman_table(root: *const HuffmanNode, allocator: std.mem.Allocator) !HuffmanTable {
     var result = HuffmanTable.init(allocator);
     try huffman_table_rec(root, &result, 0, 0);
     return result;
@@ -225,7 +225,7 @@ test "huffman_coding" {
     const cdabe = HuffmanNode{ .character = null, .frequency = 55, .left = &cd, .right = &abe };
     const expected = HuffmanNode{ .character = null, .frequency = 100, .left = &f, .right = &cdabe };
 
-    const tree: *HuffmanNode = try huffman_coding(&freqs, allocator);
+    const tree: *const HuffmanNode = try huffman_coding(&freqs, allocator);
     defer tree.free(allocator);
 
     try std.testing.expect(trees.same_tree(HuffmanNode, equal, tree, &expected));
@@ -256,7 +256,7 @@ test "huffman_encode/decode" {
         std.debug.print("{c}:{}\n", .{ kv.key_ptr.*, kv.value_ptr.* });
     }
 
-    const tree: *HuffmanNode = try huffman_coding(&freqs, allocator);
+    const tree: *const HuffmanNode = try huffman_coding(&freqs, allocator);
     defer tree.free(allocator);
 
     tree.print();
