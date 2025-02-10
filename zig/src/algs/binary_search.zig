@@ -26,15 +26,50 @@ pub fn binary_search(comptime T: type, comptime compare_fn: fn (T, T) Ordering, 
     return .{ .absent = low };
 }
 
+// bit_width:
+//         lzcnt   rax, rdi
+//         neg     eax
+//         and     eax, 63
+//         ret
 inline fn bit_width(comptime T: type, x: T) usize {
     return 1 + std.math.log2_int(usize, x);
 }
 
+// bit_floor:
+//         lzcnt   rax, rdi
+//         not     al
+//         mov     ecx, 1
+//         shlx    rax, rcx, rax
+//         ret
 inline fn bit_floor(comptime T: type, n: T) usize {
     const one: usize = 1;
     const shift: u6 = @truncate(bit_width(T, n) - 1);
     return one << shift;
 }
+
+// bit_floor_bit_twidling:
+//         mov     rax, rdi
+//         shr     rax
+//         or      rax, rdi
+//         mov     rcx, rax
+//         shr     rcx, 2
+//         or      rcx, rax
+//         mov     rax, rcx
+//         shr     rax, 4
+//         or      rax, rcx
+//         mov     rcx, rax
+//         shr     rcx, 8
+//         or      rcx, rax
+//         mov     rdx, rcx
+//         shr     rdx, 16
+//         or      rdx, rcx
+//         mov     rax, rdx
+//         shr     rax, 32
+//         or      rax, rdx
+//         mov     rcx, rax
+//         shr     rcx
+//         sub     rax, rcx
+//         ret
 
 inline fn bit_floor_bit_twidling(comptime T: type, n: T) usize {
     const bits: usize = comptime @bitSizeOf(T);
