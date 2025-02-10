@@ -27,26 +27,40 @@ pub fn binary_search(comptime T: type, comptime compare_fn: fn (T, T) Ordering, 
 }
 
 inline fn bit_width(comptime T: type, x: T) usize {
-    return 1 + std.math.log2(x);
+    return 1 + std.math.log2_int(usize, x);
 }
 
-inline fn bit_floor(comptime T: type, x: T) usize {
+inline fn bit_floor(comptime T: type, n: T) usize {
     const one: usize = 1;
-    const shift: u6 = @intCast(bit_width(T, x) - 1);
+    const shift: u6 = @truncate(bit_width(T, n) - 1);
     return one << shift;
+}
+
+inline fn bit_floor_bit_twidling(comptime T: type, n: T) usize {
+    const bits: usize = comptime @bitSizeOf(T);
+    const lg2_bits: usize = comptime std.math.log2_int(usize, bits);
+
+    var x = n;
+    inline for (0..lg2_bits) |power| {
+        x |= x >> (1 << power);
+    }
+
+    return x - (x >> 1);
 }
 
 pub fn binary_search_branchless(comptime T: type, comptime compare_fn: fn (T, T) bool, want: u32, elements: []const T) T {
     var haystack = elements;
     const length = haystack.len;
-    var step: usize = bit_floor(usize, length) >> 1;
+    var step: usize = bit_floor_bit_twidling(usize, length) >> 1;
 
+    // NB: need to throw this in godbolt to determine if compiles to conditional move
     while (step > 0) : (step >>= 1) {
         if (compare_fn(elements[step], want)) {
             haystack = haystack[step..];
         }
     }
 
+    // Not convinced the casting is better
     const compare: usize = @intFromBool(compare_fn(haystack[0], want));
     return haystack[0 + compare];
 }
