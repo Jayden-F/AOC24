@@ -35,6 +35,12 @@ inline fn bit_width(comptime T: type, x: T) usize {
     return 1 + std.math.log2_int(usize, x);
 }
 
+inline fn bit_ceil(comptime T: type, x: T) usize {
+    const one: usize = 1;
+    const shift: u6 = @truncate(bit_width(T, x - 1));
+    return one << shift;
+}
+
 // bit_floor:
 //         lzcnt   rax, rdi
 //         not     al
@@ -85,10 +91,17 @@ inline fn bit_floor_bit_twidling(comptime T: type, n: T) usize {
 
 pub fn binary_search_branchless(comptime T: type, comptime compare_fn: fn (T, T) bool, want: T, elements: []const T) T {
     var haystack = elements;
-    const length = haystack.len;
-    var step: usize = bit_floor_bit_twidling(usize, length) >> 1;
+    var length = haystack.len;
+    var step: usize = bit_floor_bit_twidling(usize, length);
+
+    if (step != length and compare_fn(haystack[step], want)) {
+        length -= step + 1;
+        step = bit_ceil(usize, length);
+        haystack = haystack[length - step ..];
+    }
 
     // NB: need to throw this in godbolt to determine if compiles to conditional move
+    step >>= 1;
     while (step > 0) : (step >>= 1) {
         if (compare_fn(elements[step], want)) {
             haystack = haystack[step..];
