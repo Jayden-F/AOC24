@@ -107,11 +107,18 @@ pub fn build(b: *std.Build) void {
     const run_day7_unit_tests = b.addRunArtifact(day7_unit_tests);
 
     const sorting_tests = b.addTest(.{
-        .root_source_file = b.path("src/sorting.zig"),
+        .root_source_file = b.path("src/algs/sorting.zig"),
         .target = target,
         .optimize = optimize,
     });
     const run_sorting_tests = b.addRunArtifact(sorting_tests);
+
+    const binary_search = b.addTest(.{
+        .root_source_file = b.path("src/algs/binary_search.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_binary_search = b.addRunArtifact(binary_search);
 
     const day6_test = b.addTest(.{
         .root_source_file = b.path("src/day_6.zig"),
@@ -138,4 +145,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_sorting_tests.step);
     test_step.dependOn(&run_huffman_test.step);
     test_step.dependOn(&run_day6_test.step);
+    test_step.dependOn(&run_binary_search.step);
 }

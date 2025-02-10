@@ -35,13 +35,6 @@ pub fn hasDeclaration(comptime T: type, comptime decl: []const u8) bool {
 }
 
 pub fn PriorityQueue(comptime T: type, comptime compare_fn: fn (T, T) bool) type {
-    if (!hasDeclaration(T, "set_priority")) {
-        @compileError("Type does not implement set priority");
-    }
-    if (!hasDeclaration(T, "get_priority")) {
-        @compileError("Type does not implement get priority");
-    }
-
     return struct {
         const Self = @This();
 
@@ -154,12 +147,10 @@ pub fn PriorityQueue(comptime T: type, comptime compare_fn: fn (T, T) bool) type
         }
 
         pub inline fn contains(self: *const Self, value: T) bool {
-            // std.debug.print("contains {}\n", .{value});
             if (value.get_priority()) |priority| {
-                if (priority >= self.len) {
-                    return false;
+                if (priority < self.len) {
+                    return std.meta.eql(value, self.elements[priority]);
                 }
-                return std.meta.eql(value, self.elements[priority]);
             }
             return false;
         }
@@ -219,56 +210,56 @@ fn lessThan(a: Node_u64, b: Node_u64) bool {
     return a.value < b.value;
 }
 
-// test "test priority queue" {
-//     std.debug.print("\n", .{});
-//
-//     const allocator = std.testing.allocator;
-//     const Queue = PriorityQueue(*Node_u64, lessThanPtr);
-//
-//     var queue = try Queue.init(allocator, 1);
-//     defer queue.deinit();
-//
-//     var n: u64 = 1_000_000;
-//     var nodes = try allocator.alloc(Node_u64, n);
-//     defer allocator.free(nodes);
-//     while (n > 0) : (n -= 1) {
-//         nodes[n - 1].value = n;
-//         try queue.push(&nodes[n - 1]);
-//         std.debug.assert(queue.contains(&nodes[n - 1]));
-//     }
-//
-//     while (queue.len > 0) {
-//         const node = try queue.pop();
-//         // std.debug.print("{}\n", .{node});
-//         std.debug.assert(!queue.contains(node));
-//     }
-//
-//     std.debug.print("heap ops: {}\n", .{queue.heap_ops});
-// }
+test "test priority queue" {
+    std.debug.print("\n", .{});
 
-// test "test build priority queue" {
-//     std.debug.print("\n", .{});
-//
-//     const allocator = std.testing.allocator;
-//     const Queue = PriorityQueue(Node_u64, lessThan);
-//
-//     var n: u64 = 1_000_000;
-//     var nodes = try allocator.alloc(Node_u64, n);
-//     defer allocator.free(nodes);
-//
-//     while (n > 1) : (n -= 1) {
-//         nodes[n - 1].value = n;
-//     }
-//
-//     var queue = try Queue.build(allocator, nodes);
-//     defer queue.deinit();
-//     std.debug.print("heap ops: {}\n", .{queue.heap_ops});
-//
-//     while (queue.len > 0) {
-//         const node = try queue.pop();
-//         std.debug.print("{}\n", .{node});
-//         std.debug.assert(!queue.contains(node));
-//     }
-//
-//     std.debug.print("heap ops: {}\n", .{queue.heap_ops});
-// }
+    const allocator = std.testing.allocator;
+    const Queue = PriorityQueue(*Node_u64, lessThanPtr);
+
+    var queue = try Queue.init(allocator, 1);
+    defer queue.deinit();
+
+    var n: u64 = 1_000_000;
+    var nodes = try allocator.alloc(Node_u64, n);
+    defer allocator.free(nodes);
+    while (n > 0) : (n -= 1) {
+        nodes[n - 1].value = n;
+        try queue.push(&nodes[n - 1]);
+        std.debug.assert(queue.contains(&nodes[n - 1]));
+    }
+
+    while (queue.len > 0) {
+        const node = try queue.pop();
+        // std.debug.print("{}\n", .{node});
+        std.debug.assert(!queue.contains(node));
+    }
+
+    std.debug.print("heap ops: {}\n", .{queue.heap_ops});
+}
+
+test "test build priority queue" {
+    std.debug.print("\n", .{});
+
+    const allocator = std.testing.allocator;
+    const Queue = PriorityQueue(Node_u64, lessThan);
+
+    var n: u64 = 1_000_000;
+    var nodes = try allocator.alloc(Node_u64, n);
+    defer allocator.free(nodes);
+
+    while (n > 1) : (n -= 1) {
+        nodes[n - 1].value = n;
+    }
+
+    var queue = try Queue.build(allocator, nodes);
+    defer queue.deinit();
+    std.debug.print("heap ops: {}\n", .{queue.heap_ops});
+
+    while (queue.len > 0) {
+        const node = try queue.pop();
+        std.debug.print("{}\n", .{node});
+        std.debug.assert(!queue.contains(node));
+    }
+
+    std.debug.print("heap ops: {}\n", .{queue.heap_ops});
+}
