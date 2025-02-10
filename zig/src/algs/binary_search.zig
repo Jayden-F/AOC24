@@ -7,7 +7,7 @@ const BinarySearchResult = union(enum) {
     absent: usize,
 };
 
-pub fn binary_search(comptime T: type, comptime compare_fn: fn (T, T) Ordering, want: u32, elements: []const T) BinarySearchResult {
+pub fn binary_search(comptime T: type, comptime compare_fn: fn (T, T) Ordering, want: T, elements: []const T) BinarySearchResult {
     var low: usize = 0;
     var high: usize = elements.len;
 
@@ -83,7 +83,7 @@ inline fn bit_floor_bit_twidling(comptime T: type, n: T) usize {
     return x - (x >> 1);
 }
 
-pub fn binary_search_branchless(comptime T: type, comptime compare_fn: fn (T, T) bool, want: u32, elements: []const T) T {
+pub fn binary_search_branchless(comptime T: type, comptime compare_fn: fn (T, T) bool, want: T, elements: []const T) T {
     var haystack = elements;
     const length = haystack.len;
     var step: usize = bit_floor_bit_twidling(usize, length) >> 1;
