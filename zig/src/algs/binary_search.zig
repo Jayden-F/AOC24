@@ -103,7 +103,7 @@ pub fn binary_search_branchless(comptime T: type, comptime compare_fn: fn (T, T)
     // NB: need to throw this in godbolt to determine if compiles to conditional move
     step >>= 1;
     while (step > 0) : (step >>= 1) {
-        if (compare_fn(elements[step], want)) {
+        if (compare_fn(haystack[step], want)) {
             haystack = haystack[step..];
         }
     }
