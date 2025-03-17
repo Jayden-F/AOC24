@@ -3,7 +3,7 @@ pub fn same_tree(comptime T: type, comptime is_equal: fn (*const T, *const T) bo
         return true;
     }
 
-    if (a == null and b == null) {
+    if (a == null or b == null) {
         return false;
     }
 
@@ -11,5 +11,5 @@ pub fn same_tree(comptime T: type, comptime is_equal: fn (*const T, *const T) bo
     const b_: *const T = b.?;
 
     return is_equal(a_, b_) and same_tree(T, is_equal, a_.left, b_.left) and
-        same_tree(T, is_equal, a_.right, a_.right);
+        same_tree(T, is_equal, a_.right, b_.right);
 }
